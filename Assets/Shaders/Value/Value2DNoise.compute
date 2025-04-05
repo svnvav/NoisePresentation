@@ -1,0 +1,72 @@
+﻿#pragma kernel CSMain
+
+uniform int NoiseScale;
+uniform int Octaves = 1;
+uniform int Lacunarity = 2;
+uniform float Persistence = 0.5;
+uniform float RandomFactor = 1;
+uniform float ContinuityFactor = 1;
+uniform float EasingFactor = 1;
+
+StructuredBuffer<uint> Hashes;
+static uint hashMask = 255;
+
+
+RWTexture2D<float4> Output;
+
+
+float ValueNoise(float2 uv, int frequency, float scale)
+{
+    float2 p = uv * frequency;
+    p.xy *= NoiseScale;
+    int2 i0 = floor(p);
+    float2 t = frac(p);
+    t.x = lerp(t.x, smoothstep(0., 1., t.x), EasingFactor);
+    t.y = lerp(t.y, smoothstep(0., 1., t.y), EasingFactor);
+
+    i0 &= hashMask;
+
+    int2 i1 = i0 + 1;
+    i1 = i1 % floor(frequency * NoiseScale);
+
+    int h0 = Hashes[i0.x];
+    int h1 = Hashes[i1.x];
+    int h00 = Hashes[h0 + i0.y];
+    int h10 = Hashes[h1 + i0.y];
+    int h01 = Hashes[h0 + i1.y];
+    int h11 = Hashes[h1 + i1.y];
+
+    float keyValue = h00;
+    float linearValue = lerp(lerp(h00, h10, t.x), lerp(h01, h11, t.x), t.y);
+
+    return lerp(keyValue, linearValue, ContinuityFactor) / hashMask;
+}
+
+[numthreads(8,8,1)]
+void CSMain(uint3 id : SV_DispatchThreadID)
+{
+    uint w, h;
+    Output.GetDimensions(w, h);
+
+    int frequency = 1;
+    float amplitude = 1.0;
+    float range = 1.0;
+
+    float2 uv = float2((id.x + 0.5) / w, (id.y + 0.5) / h);
+
+    float noiseValue;
+    for(int o = 0; o < Octaves; o++)
+    {
+        noiseValue += ValueNoise(uv, frequency, NoiseScale) * amplitude;
+        frequency *= Lacunarity;
+        amplitude *= Persistence;
+        range += amplitude;
+    }
+    range -= amplitude;//compensate
+    noiseValue /= range;
+
+    float4 result = lerp(0.5, noiseValue, RandomFactor);
+    result.a = 1;
+
+    Output[id.xy] = result;
+}

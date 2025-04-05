@@ -1,0 +1,41 @@
+﻿#pragma kernel CSMain
+
+#include "CellularNoiseFunc.hlsl"
+
+RWTexture2D<float4> Output;
+
+
+[numthreads(8,8,1)]
+void CSMain(uint3 id : SV_DispatchThreadID)
+{
+    float persistence = Config.w;
+    
+    uint w, h;
+    Output.GetDimensions(w, h);
+    
+    int frequency = 1;
+    float amplitude = 1.0;
+    float range = 1.0;
+
+    float3 pos = float3((id.x + 0.5) / w, (id.y + 0.5) / h, saturate(ZSliceOffset - 0.00001));
+    float3 cellPos = pos * NoiseScale;
+    
+    float noiseValue;
+
+    for(uint o = 0; o < Octaves; o++)
+    {
+        range += amplitude;
+        noiseValue += WorleyNoise(cellPos * frequency,frequency * NoiseScale) * amplitude;
+        frequency *= Lacunarity;
+        amplitude *= persistence;
+    }
+    
+    noiseValue /= range;
+
+    noiseValue *= step(Thresholds.w, noiseValue);
+    float3 worldPos = pos;
+    worldPos.x = 1 - worldPos.x;
+    float3 color = lerp(1, worldPos, Factors.x) * noiseValue;
+    color *= step(Thresholds.x, 1 - worldPos.x) * step(Thresholds.y, 1 - worldPos.y) * step(Thresholds.z, 1 - worldPos.z);
+    Output[id.xy] = float4(color, 1);
+}

@@ -1,0 +1,111 @@
+﻿#pragma kernel CSMain
+
+#define Skewers float2(0.211324865405187, 0.366025403784439)
+
+uniform uint NoiseScale;
+uniform uint Octaves = 1;
+uniform uint Lacunarity = 2;
+uniform float Persistence = 0.5;
+uniform float BarycentricFactor = 0;
+uniform float SkewFactor = 1;
+uniform float RandomFactor = 1;
+uniform float ContinuityFactor = 1;
+
+StructuredBuffer<uint> Hashes;
+static uint HashMask = 255;
+
+
+RWTexture2D<float4> Output;
+
+
+float fallOff(float2 t)
+{
+    float f = 0.5 - t.x * t.x - t.y * t.y;
+    if(f > 0.)
+    {
+        return f * f * f;
+    }
+    return 0;
+}
+
+float SimplexValuePart(float2 p, int2 i)
+{
+    float unskew = SkewFactor * dot(i, Skewers.xx);
+    float2 unskewed = p - i + unskew;
+    uint h = Hashes[Hashes[i.x & HashMask] + i.y & HashMask];
+    return fallOff(unskewed) * h;
+}
+
+float Noise(float2 position, uint scale)
+{
+    float2 pos = position * scale;
+    float2 skewed = pos + SkewFactor * dot(pos, Skewers.yy);
+	
+    int2 i0 = floor(skewed);
+    float2 x0 = skewed - i0;
+    int2 i1 = i0 + ((x0.x > x0.y) ? int2(1, 0) : int2(0, 1));
+    int2 i2 = i0 + int2(1, 1);
+
+    float keyColor0 = Hashes[Hashes[i0.x & HashMask] + i0.y & HashMask];
+    
+    float sample = SimplexValuePart(pos, i0);
+    sample += SimplexValuePart(pos, i1);
+    sample += SimplexValuePart(pos, i2);
+
+    return lerp(keyColor0, sample * 8, ContinuityFactor) / HashMask;
+}
+
+
+float3 Barycentric(float2 position, uint scale) {
+
+    float2 pos = position * scale;
+
+    float2 posSkewed = pos + SkewFactor * dot(pos, Skewers.yy);
+    float2 x0 = frac(posSkewed);
+    
+    // See: https://codeplea.com/triangular-interpolation
+    float2 p = x0;
+    float2 v1 = float2(0, 0);
+    float2 v2 = (x0.x > x0.y) ? int2(1, 0) : int2(0, 1);
+    float2 v3 = float2(1, 1);
+    
+    float denominator = (v2.y - v3.y) * (v1.x - v3.x) + (v3.x - v2.x) * (v1.y - v3.y);
+    denominator = 1 / denominator;
+
+    float w1 = (v2.y - v3.y) * (p.x - v3.x) + (v3.x - v2.x) * (p.y - v3.y);
+    w1 *= denominator;
+    float w2 = (v3.y - v1.y) * (p.x - v3.x) + (v1.x - v3.x) * (p.y - v3.y);
+    w2 *= denominator;
+    float w3 = 1 - w1 - w2;
+
+    return float3(w1, w2, w3);
+}
+
+[numthreads(8,8,1)]
+void CSMain(uint3 id : SV_DispatchThreadID)
+{
+    uint w, h;
+    Output.GetDimensions(w, h);
+
+    uint frequency = 1;
+    float amplitude = 1.0;
+    float range = 1.0;
+
+    float2 uv = float2((id.x + 0.5) / w, (id.y + 0.5) / h);
+
+    float noiseValue;
+    for(uint o = 0; o < Octaves; o++)
+    {
+        noiseValue += Noise(uv, frequency * NoiseScale) * amplitude;
+        frequency *= Lacunarity;
+        amplitude *= Persistence;
+        range += amplitude;
+    }
+    range -= amplitude;//compensate
+    noiseValue /= range;
+    noiseValue = lerp(0.5, noiseValue, RandomFactor);
+
+    float3 color = lerp(noiseValue, Barycentric(uv, NoiseScale), BarycentricFactor);
+
+    Output[id.xy] = float4(color, 1);
+}

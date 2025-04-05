@@ -1,0 +1,46 @@
+﻿#include "SimplexValueNoiseFunc.hlsl"
+
+#pragma kernel CSMain
+
+
+RWTexture2D<float4> Output;
+
+
+[numthreads(8,8,1)]
+void CSMain(uint3 id : SV_DispatchThreadID)
+{
+    float voxelSize = Config.y;
+    float persistence = Config.w;
+
+    float randomFactor = Factors.y;
+    float axisColorFactor = Factors.x;
+    
+    uint w, h;
+    Output.GetDimensions(w, h);
+    
+    int frequency = 1;
+    float amplitude = 1.0;
+    float range = 1.0;
+
+    float3 pos = float3((id.x + 0.5) / w, (id.y + 0.5) / h, ZSliceOffset * (1 - voxelSize));
+    float noiseValue;
+	    
+    for(uint o = 0; o < Octaves; o++)
+    {
+        noiseValue += Noise(pos, frequency * NoiseScale) * amplitude;
+        frequency *= Lacunarity;
+        amplitude *= persistence;
+        range += amplitude;
+    }
+    range -= amplitude;//compensate
+    noiseValue /= range;
+    noiseValue *= 0.5;
+    noiseValue += 0.5;
+    noiseValue *= step(Thresholds.w, noiseValue);
+    noiseValue = lerp(0.5, noiseValue, randomFactor);
+    float3 worldPos = pos;
+    worldPos.x = 1 - worldPos.x;
+    float3 color = lerp(1, worldPos, axisColorFactor) * noiseValue;
+    color *= step(Thresholds.x, 1 - worldPos.x) * step(Thresholds.y, 1 - worldPos.y) * step(Thresholds.z, 1 - worldPos.z);
+    Output[id.xy] = float4(color, 1);
+}

@@ -1,0 +1,20 @@
+﻿
+
+#pragma kernel CSMain
+
+uniform int Count;
+StructuredBuffer<float4> Colors;
+
+
+RWTexture2D<float4> Output;
+
+[numthreads(8,8,1)]
+void CSMain (uint3 id : SV_DispatchThreadID)
+{
+    uint w, h;
+    Output.GetDimensions(w, h);
+
+    uint valueIndex = id.x * Count / w;
+    
+    Output[id.xy] = Colors[valueIndex];
+}

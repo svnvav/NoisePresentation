@@ -1,0 +1,70 @@
+﻿#pragma kernel CSMain
+
+uniform uint NoiseScale;
+uniform uint Octaves = 1;
+uniform uint Lacunarity = 2;
+uniform float Persistence;
+uniform float RandomFactor;
+
+uniform uint PointCount;
+StructuredBuffer<float3> Points;
+
+RWTexture2D<float4> Output;
+
+float2 GetCellRandomPoint(int2 cell)
+{
+    int i = cell.x * 31 + cell.y * 33;
+    i = i % PointCount;
+
+    return Points[i].xy;
+}
+
+float WorleyNoise(float2 value, uint2 period)
+{
+    int2 baseCell = floor(value);
+    
+    float minDistToCell = 10;
+
+    for(int x1=-1; x1<=1; x1++){
+        for(int y1=-1; y1<=1; y1++){
+            int2 cell = baseCell + int2(x1, y1);
+            int2 tiledCell = cell % period;
+            float2 randomPoint = lerp(float2(0.5, 0.5), GetCellRandomPoint(tiledCell), RandomFactor);
+            float2 cellPosition = cell + randomPoint;
+            float2 toCell = cellPosition - value;
+            float distToCell = length(toCell);
+            if(distToCell < minDistToCell){
+                minDistToCell = distToCell;
+            }
+        }
+    }
+
+    return minDistToCell;
+}
+
+[numthreads(8,8,1)]
+void CSMain(uint3 id : SV_DispatchThreadID)
+{
+    uint w, h;
+    Output.GetDimensions(w, h);
+    
+    int frequency = 1;
+    float amplitude = 1.0;
+    float range = 1.0;
+
+    float2 pos = float2((id.x + 0.5) / w, (id.y + 0.5) / h);
+    float2 cellPos = pos * NoiseScale;
+    
+    float noiseValue;
+
+    for(uint o = 0; o < Octaves; o++)
+    {
+        range += amplitude;
+        noiseValue += WorleyNoise(cellPos * frequency,frequency * NoiseScale) * amplitude;
+        frequency *= Lacunarity;
+        amplitude *= Persistence;
+    }
+    noiseValue /= range;
+    
+    Output[id.xy] = float4(noiseValue, noiseValue, noiseValue, 1);
+}
