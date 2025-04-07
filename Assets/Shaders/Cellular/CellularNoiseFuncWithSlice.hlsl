@@ -8,7 +8,9 @@ uniform uint NoiseScale;
 uniform uint Octaves = 1;
 uniform uint Lacunarity = 2;
 uniform float4 Config;
+uniform float4 Factors;
 uniform float4 Thresholds;
+uniform float ZSliceOffset;
 
 void ConfigureProcedural()
 {
@@ -41,7 +43,7 @@ float3 hash33(uint3 q)
 inline float DistanceToCellSq(float3 pos, int3 cell, uint3 period)
 {
 	int3 tiledCell = cell % period;
-	float3 cellPosition = cell + hash33(tiledCell);
+	float3 cellPosition = cell + lerp(float3(0.5, 0.5, 0.5), hash33(tiledCell), Factors.y);
     float3 toCell = cellPosition - pos;
     return dot(toCell, toCell);
 }
@@ -118,8 +120,12 @@ float WorleyNoise(float3 pos, uint3 period)
 
 float4 Noise(float3 positionWorldSpace)
 {
+    #if defined(UNITY_PROCEDURAL_INSTANCING_ENABLED)
+	    float voxelSize = Config.y;
 		float multiplier = Config.z;
 		float persistence = Config.w;
+	
+		float axisColorFactor = Factors.x;
 
 
 		int frequency = 1;
@@ -144,12 +150,23 @@ float4 Noise(float3 positionWorldSpace)
 		noiseValue /= range;
 
 		noiseValue *= step(Thresholds.w, noiseValue);
-		noiseValue *= step(Thresholds.x, 1 - positionWorldSpace.x) *
+		noiseValue *=	step(Thresholds.x, 1 - positionWorldSpace.x) *
 						step(Thresholds.y, 1 - positionWorldSpace.y) *
 						step(Thresholds.z, 1 - positionWorldSpace.z);
-		float3 color = float3(1, 1, 1);
-
-	return float4(color, noiseValue * multiplier);
-		
+		float3 color = lerp(1, positionWorldSpace, axisColorFactor);
+		if(ZSliceOffset - voxelSize * 0.001 < positionWorldSpace.z && positionWorldSpace.z < ZSliceOffset + voxelSize * 1.001)
+		{
+			return float4(noiseValue, 0, noiseValue, 1);
+		}
+		else
+		{
+			return float4(
+			color,
+			noiseValue * multiplier
+			);
+		}
+    #else
+    return 1.0;
+    #endif
 }
 
