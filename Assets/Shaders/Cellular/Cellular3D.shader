@@ -35,7 +35,7 @@ Shader "Custom/Cellular3DNoise"
 
             // Includes
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
-            #include "CellularNoiseFuncWithSlice.hlsl"
+            #include "CellularNoiseFunc.hlsl"
 
             // --------------------------------------------------
             // Structs and Packing

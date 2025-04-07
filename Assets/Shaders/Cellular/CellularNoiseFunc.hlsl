@@ -8,7 +8,6 @@ uniform uint NoiseScale;
 uniform uint Octaves = 1;
 uniform uint Lacunarity = 2;
 uniform float4 Config;
-uniform float4 Thresholds;
 
 void ConfigureProcedural()
 {
@@ -118,16 +117,15 @@ float WorleyNoise(float3 pos, uint3 period)
 
 float4 Noise(float3 positionWorldSpace)
 {
-		float multiplier = Config.z;
+		float alphaMultiplier = Config.z;
 		float persistence = Config.w;
 
-
 		int frequency = 1;
-		float amplitude = 1;
-		float range = 1;
+		float amplitude = 1.0;
+		float range = 1.0;
 
 		float3 pos = positionWorldSpace;
-		pos.x = 1 - pos.x;
+		pos.x = 1.0 - pos.x;
 		
 		float3 cellPos = pos * NoiseScale;
 
@@ -142,14 +140,10 @@ float4 Noise(float3 positionWorldSpace)
 		}
 
 		noiseValue /= range;
+	
+		float3 color = float3(1.0, 1.0, 1.0);
 
-		noiseValue *= step(Thresholds.w, noiseValue);
-		noiseValue *= step(Thresholds.x, 1 - positionWorldSpace.x) *
-						step(Thresholds.y, 1 - positionWorldSpace.y) *
-						step(Thresholds.z, 1 - positionWorldSpace.z);
-		float3 color = float3(1, 1, 1);
-
-	return float4(color, noiseValue * multiplier);
+	return float4(color, noiseValue * alphaMultiplier);
 		
 }
 
