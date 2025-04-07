@@ -95,7 +95,7 @@ Material:
     m_Ints: []
     m_Floats:
     - _AlphaClip: 0
-    - _AlphaThreshold: 0.9982971
+    - _AlphaThreshold: 0.9991747
     - _Blend: 0
     - _BlendOpacity: 0.538
     - _BumpScale: 1
